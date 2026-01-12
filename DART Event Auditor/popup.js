@@ -43,8 +43,8 @@ async function checkForUpdates() {
         if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
             updateVersionEl.textContent = latestVersion;
             updateAlertEl.classList.add('show');
-            // Set download URL to GitHub release ZIP
-            downloadUpdateBtn.href = `https://github.com/${GITHUB_REPO}/archive/refs/tags/${latestVersion}.zip`;
+            // Set download URL to release asset ZIP
+            downloadUpdateBtn.href = `https://github.com/${GITHUB_REPO}/releases/download/${latestVersion}/DART-Event-Auditor-${latestVersion}.zip`;
         }
     } catch (e) {
         console.log('Update check failed:', e);
