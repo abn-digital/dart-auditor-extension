@@ -63,6 +63,9 @@ if (dismissUpdateBtn) {
 // Check for updates on popup open
 checkForUpdates();
 
+// Display current version
+document.getElementById('version-footer').textContent = `v${CURRENT_VERSION}`;
+
 // Map platform to CSS class
 function getPlatformClass(platform) {
     const map = {
