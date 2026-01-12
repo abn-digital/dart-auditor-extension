@@ -61,7 +61,7 @@ console.log('');
 
 // 4. Push to GitHub
 console.log('⬆️  Pushing to GitHub...');
-run('git push origin main');
+run('git push origin master');
 run(`git push origin v${version}`);
 console.log('');
 
