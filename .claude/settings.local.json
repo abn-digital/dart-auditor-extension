@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcloud functions:*)",
+      "Bash(dir:*)",
+      "WebFetch(domain:simlimites.com)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm install)",
+      "Bash(tree:*)",
+      "Bash(gh auth status:*)"
+    ]
+  }
+}

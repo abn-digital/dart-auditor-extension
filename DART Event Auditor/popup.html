@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            width: 320px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #10b981;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .status.connected {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+        }
+        .status.disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+        }
+        .domain {
+            background: rgba(255,255,255,0.1);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+        .domain strong {
+            color: #10b981;
+        }
+        .platforms {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .platform-badge {
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+        }
+        .platform-badge.ga4 { border-left: 3px solid #4285f4; }
+        .platform-badge.meta { border-left: 3px solid #1877f2; }
+        .platform-badge.gads { border-left: 3px solid #fbbc04; }
+        .platform-badge.tiktok { border-left: 3px solid #ff0050; }
+        .events {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+        .event {
+            padding: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .event-platform {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+            min-width: 45px;
+            text-align: center;
+        }
+        .event-platform.ga4 { background: #4285f4; color: white; }
+        .event-platform.meta { background: #1877f2; color: white; }
+        .event-platform.gads { background: #fbbc04; color: #333; }
+        .event-platform.tiktok { background: #ff0050; color: white; }
+        .event-name {
+            color: #10b981;
+            font-weight: bold;
+            flex: 1;
+        }
+        .event-value {
+            color: #888;
+        }
+        .instructions {
+            font-size: 11px;
+            color: #888;
+            line-height: 1.4;
+        }
+        .btn {
+            width: 100%;
+            padding: 10px;
+            background: #10b981;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .btn:hover {
+            background: #0d9668;
+        }
+        .alert {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid #fbbf24;
+            color: #fbbf24;
+            display: none;
+        }
+        .alert.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>DART Event Auditor</h1>
+
+    <div class="alert" id="multi-alert">
+        Another extension is already connected. Events from this browser are blocked.
+    </div>
+
+    <div class="status" id="status">
+        Checking connection...
+    </div>
+
+    <div class="domain" id="domain-info">
+        <strong>Target:</strong> <span id="target">None</span>
+    </div>
+
+    <div class="platforms">
+        <span class="platform-badge ga4">GA4</span>
+        <span class="platform-badge meta">Meta</span>
+        <span class="platform-badge gads">Google Ads</span>
+        <span class="platform-badge tiktok">TikTok</span>
+    </div>
+
+    <div class="events" id="events">
+        <div class="instructions">
+            1. Open the DART portal<br>
+            2. Enter target domain and start listening<br>
+            3. Browse the target site<br>
+            4. Events appear in portal
+        </div>
+    </div>
+
+    <button class="btn" id="reconnect">Reconnect</button>
+
+    <script src="popup.js"></script>
+</body>
+</html>
