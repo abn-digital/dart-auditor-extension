@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "DART Event Auditor",
-  "version": "2.0.0",
+  "version": "2.1.3",
   "description": "Captures GA4, Meta Pixel, Google Ads, and TikTok Pixel events for DART Tracking Portal",
-  "permissions": ["webRequest", "storage", "scripting", "tabs", "activeTab"],
+  "permissions": [
+    "webRequest",
+    "storage",
+    "scripting",
+    "tabs",
+    "activeTab"
+  ],
   "host_permissions": [
     "*://*.google-analytics.com/*",
     "*://*.analytics.google.com/*",
@@ -21,8 +27,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }
