@@ -11,6 +11,7 @@ const multiAlertEl = document.getElementById('multi-alert');
 const updateAlertEl = document.getElementById('update-alert');
 const updateVersionEl = document.getElementById('update-version');
 const dismissUpdateBtn = document.getElementById('dismiss-update');
+const downloadUpdateBtn = document.getElementById('download-update');
 
 let recentEvents = [];
 
@@ -42,7 +43,8 @@ async function checkForUpdates() {
         if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
             updateVersionEl.textContent = latestVersion;
             updateAlertEl.classList.add('show');
-            updateAlertEl.href = release.html_url;
+            // Set download URL to GitHub release ZIP
+            downloadUpdateBtn.href = `https://github.com/${GITHUB_REPO}/archive/refs/tags/${latestVersion}.zip`;
         }
     } catch (e) {
         console.log('Update check failed:', e);
@@ -57,6 +59,14 @@ if (dismissUpdateBtn) {
         const version = updateVersionEl.textContent;
         await chrome.storage.local.set({ dismissedVersion: version });
         updateAlertEl.classList.remove('show');
+    });
+}
+
+// Reload extension button
+const reloadBtn = document.getElementById('reload-extension');
+if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+        chrome.runtime.reload();
     });
 }
 
