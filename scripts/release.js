@@ -73,12 +73,16 @@ const releaseNotes = `## DART Event Auditor v${version}
 - [Add release notes here]
 
 ### How to Update
-1. Pull the latest changes: \`git pull origin main\`
+1. Pull the latest changes: \`git pull origin master\`
 2. Go to \`chrome://extensions\`
 3. Click the refresh icon on the DART Event Auditor card
 `;
 
-run(`gh release create v${version} --repo ${REPO_OWNER}/${REPO_NAME} --title "DART Event Auditor v${version}" --notes "${releaseNotes.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`);
+// Write notes to temp file to preserve formatting
+const notesFile = path.join(__dirname, '..', 'RELEASE_NOTES.tmp');
+fs.writeFileSync(notesFile, releaseNotes);
+run(`gh release create v${version} --repo ${REPO_OWNER}/${REPO_NAME} --title "DART Event Auditor v${version}" --notes-file "${notesFile}"`);
+fs.unlinkSync(notesFile);
 
 console.log(`\n✅ Release v${version} created successfully!`);
 console.log(`🔗 https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/tag/v${version}\n`);
