@@ -179,15 +179,6 @@
         .update-btn:hover {
             background: #0d9668;
         }
-        .download-btn {
-            margin-bottom: 6px;
-        }
-        .reload-btn {
-            background: rgba(255,255,255,0.15);
-        }
-        .reload-btn:hover {
-            background: rgba(255,255,255,0.25);
-        }
         .version-badge {
             font-size: 10px;
             color: #666;
@@ -212,11 +203,10 @@
             <button class="dismiss" id="dismiss-update">×</button>
         </div>
         <div class="update-instructions">
-            1. Download and extract the ZIP<br>
-            2. Replace your current extension folder<br>
+            1. Open your extension folder<br>
+            2. Double-click <code>update.bat</code><br>
             3. Click "Reload Extension" below
         </div>
-        <a class="update-btn download-btn" id="download-update" href="#" target="_blank">Download ZIP</a>
         <button class="update-btn reload-btn" id="reload-extension">Reload Extension</button>
     </div>
 

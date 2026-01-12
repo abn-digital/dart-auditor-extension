@@ -11,7 +11,6 @@ const multiAlertEl = document.getElementById('multi-alert');
 const updateAlertEl = document.getElementById('update-alert');
 const updateVersionEl = document.getElementById('update-version');
 const dismissUpdateBtn = document.getElementById('dismiss-update');
-const downloadUpdateBtn = document.getElementById('download-update');
 
 let recentEvents = [];
 
@@ -43,8 +42,6 @@ async function checkForUpdates() {
         if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
             updateVersionEl.textContent = latestVersion;
             updateAlertEl.classList.add('show');
-            // Set download URL to release asset ZIP
-            downloadUpdateBtn.href = `https://github.com/${GITHUB_REPO}/releases/download/${latestVersion}/DART-Event-Auditor-${latestVersion}.zip`;
         }
     } catch (e) {
         console.log('Update check failed:', e);
