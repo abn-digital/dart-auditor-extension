@@ -1,0 +1,14 @@
+{
+  "name": "dart-auditor-extension",
+  "version": "2.0.0",
+  "description": "DART Event Auditor - Chrome extension for capturing analytics events",
+  "scripts": {
+    "release": "node scripts/release.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abn-digital/dart-auditor-extension.git"
+  },
+  "author": "ABN Digital",
+  "license": "PRIVATE"
+}
