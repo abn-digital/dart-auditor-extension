@@ -10,7 +10,11 @@
       "Bash(npm install)",
       "Bash(tree:*)",
       "Bash(gh auth status:*)",
-      "Bash(npm run release:*)"
+      "Bash(npm run release:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(powershell:*)",
+      "Bash(gh release create:*)"
     ]
   }
 }
