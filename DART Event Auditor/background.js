@@ -115,6 +115,16 @@ function detectPlatform(url) {
     return 'gtm-firstparty';
   }
 
+  // Gtag.js - Standard (from googletagmanager.com)
+  if (urlLower.includes('googletagmanager.com/gtag/js')) {
+    return 'gtag';
+  }
+
+  // Gtag.js - First-party (any other domain with /gtag/js pattern)
+  if (urlLower.includes('/gtag/js') && urlLower.includes('id=')) {
+    return 'gtag-firstparty';
+  }
+
   return null;
 }
 
@@ -206,25 +216,6 @@ function parseMetaEvent(url, requestBody) {
     return null;
   }
 
-  // Detect CAPI indicators
-  // eventID/eid is used for deduplication between browser and server events
-  const eventId = params.eid || params.eventID || params.event_id || null;
-  const hasEventId = !!eventId;
-
-  // External ID indicates user matching for CAPI
-  const externalId = params.external_id || params.extern_id || null;
-  const hasExternalId = !!externalId;
-
-  // Build serverSide detection object
-  const serverSide = {
-    isFirstParty: false, // Meta doesn't support first-party endpoints
-    hasEventId: hasEventId,
-    eventId: eventId,
-    hasExternalId: hasExternalId,
-    // If eventID is present, CAPI is likely configured for deduplication
-    capiConfigured: hasEventId
-  };
-
   return {
     type: 'meta-event',
     platform: 'Meta Pixel',
@@ -233,7 +224,6 @@ function parseMetaEvent(url, requestBody) {
     pageLocation: params.dl || null,
     value: params.value || null,
     currency: params.currency || params.cd_currency || null,
-    serverSide: serverSide,
     raw: params
   };
 }
@@ -360,20 +350,6 @@ function parseTikTokEvent(url, requestBody) {
     pixelId = bodyData.context.pixel.code;
   }
 
-  // TikTok Events API detection (similar to Meta CAPI)
-  // event_id is used for deduplication with server-side events
-  const eventId = bodyData.event_id || bodyData.properties?.event_id || null;
-  const hasEventId = !!eventId;
-
-  // Build serverSide detection object
-  const serverSide = {
-    isFirstParty: false,
-    hasEventId: hasEventId,
-    eventId: eventId,
-    // If event_id is present, TikTok Events API is likely configured
-    eventsApiConfigured: hasEventId
-  };
-
   return {
     type: 'tiktok-event',
     platform: 'TikTok Pixel',
@@ -382,7 +358,6 @@ function parseTikTokEvent(url, requestBody) {
     pageLocation: bodyData.context?.page?.url || null,
     value: bodyData.properties?.value || null,
     currency: bodyData.properties?.currency || null,
-    serverSide: serverSide,
     raw: { ...urlParams, body: bodyData }
   };
 }
@@ -412,6 +387,47 @@ function parseGTMEvent(url, isFirstParty = false) {
       pageLocation: null,
       serverSide: serverSide,
       raw: { id: containerId, endpoint: endpoint }
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============================================
+// Gtag.js Parser (Google tag library)
+// ============================================
+function parseGtagEvent(url, isFirstParty = false) {
+  try {
+    const urlObj = new URL(url);
+    const tagId = urlObj.searchParams.get('id') || null;
+    const endpoint = getEndpointHost(url);
+
+    // Determine tag type from ID prefix
+    let tagType = 'unknown';
+    if (tagId) {
+      if (tagId.startsWith('G-')) tagType = 'GA4';
+      else if (tagId.startsWith('AW-')) tagType = 'Google Ads';
+      else if (tagId.startsWith('DC-')) tagType = 'Floodlight';
+      else if (tagId.startsWith('GT-')) tagType = 'Google Tag';
+    }
+
+    // Build serverSide detection object
+    const serverSide = {
+      isFirstParty: isFirstParty,
+      endpoint: isFirstParty ? endpoint : null,
+      // First-party gtag.js indicates server-side setup
+      isServerSideGTM: isFirstParty
+    };
+
+    return {
+      type: 'gtag-event',
+      platform: 'Gtag',
+      event: 'library_load',
+      tagId: tagId,
+      tagType: tagType,
+      pageLocation: null,
+      serverSide: serverSide,
+      raw: { id: tagId, endpoint: endpoint, tagType: tagType }
     };
   } catch (e) {
     return null;
@@ -628,6 +644,13 @@ chrome.webRequest.onBeforeRequest.addListener(
       case 'gtm-firstparty':
         eventData = parseGTMEvent(details.url, true);
         console.log('[DART Auditor] First-party GTM detected:', getEndpointHost(details.url));
+        break;
+      case 'gtag':
+        eventData = parseGtagEvent(details.url, false);
+        break;
+      case 'gtag-firstparty':
+        eventData = parseGtagEvent(details.url, true);
+        console.log('[DART Auditor] First-party Gtag detected:', getEndpointHost(details.url));
         break;
     }
 

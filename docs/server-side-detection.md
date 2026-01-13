@@ -1,31 +1,169 @@
 # Server-Side Tracking Detection
 
-This document explains how the DART extension detects first-party and server-side tracking setups, and how the portal can use this information.
-
-## Overview
-
-The extension now includes a `serverSide` object in all events that indicates:
-- First-party endpoint usage (custom domains proxying tracking)
-- Server-side GTM indicators
-- CAPI/Events API deduplication setup
+This document explains how the DART extension detects first-party and server-side tracking setups.
 
 ---
 
-## Event Structure
+## What We Detect
 
-All events now include a `serverSide` object:
+The extension detects when tracking libraries and events are loaded/sent through **first-party domains** instead of directly to Google. This indicates a **server-side GTM (sGTM)** setup.
 
+---
+
+## Detection Overview
+
+| Type | Standard (Direct) | First-Party (Server-Side) |
+|------|-------------------|---------------------------|
+| GTM Container | `googletagmanager.com/gtm.js` | `custom-domain.com/gtm.js` |
+| Gtag.js Library | `googletagmanager.com/gtag/js` | `custom-domain.com/gtag/js` |
+| GA4 Events | `google-analytics.com/g/collect` | `custom-domain.com/g/collect` |
+
+---
+
+## 1. GTM Container Detection (`/gtm.js`)
+
+### What is it?
+The GTM container is a JavaScript file that loads all your tags configured in Google Tag Manager.
+
+### Standard Setup
+```html
+<script src="https://www.googletagmanager.com/gtm.js?id=GTM-XXXXX"></script>
+```
+
+### First-Party (Server-Side) Setup
+```html
+<script src="https://metrics.example.com/gtm.js?id=GTM-XXXXX"></script>
+```
+
+### How We Detect It
+```javascript
+// URL pattern check
+if (url.includes('/gtm.js') && url.includes('id=gtm-')) {
+  // Check if domain is NOT googletagmanager.com
+  if (!url.includes('googletagmanager.com')) {
+    return 'gtm-firstparty';  // Server-side GTM detected
+  }
+}
+```
+
+### Event Sent to Portal
+```javascript
+{
+  type: 'gtm-event',
+  platform: 'GTM',
+  event: 'container_load',
+  containerId: 'GTM-XXXXX',
+  serverSide: {
+    isFirstParty: true,
+    endpoint: 'metrics.example.com',
+    isServerSideGTM: true
+  }
+}
+```
+
+---
+
+## 2. Gtag.js Library Detection (`/gtag/js`)
+
+### What is it?
+Gtag.js is Google's tag library that can be used standalone (without GTM) to send data to GA4, Google Ads, etc.
+
+### Standard Setup
+```html
+<script src="https://www.googletagmanager.com/gtag/js?id=G-XXXXX"></script>
+<script>
+  gtag('config', 'G-XXXXX');
+</script>
+```
+
+### First-Party (Server-Side) Setup
+```html
+<script src="https://gt.example.com/gtag/js?id=G-XXXXX"></script>
+<script>
+  gtag('config', 'G-XXXXX', {
+    'server_container_url': 'https://gt.example.com'
+  });
+</script>
+```
+
+### How We Detect It
+```javascript
+// URL pattern check
+if (url.includes('/gtag/js') && url.includes('id=')) {
+  // Check if domain is NOT googletagmanager.com
+  if (!url.includes('googletagmanager.com')) {
+    return 'gtag-firstparty';  // Server-side gtag detected
+  }
+}
+```
+
+### Event Sent to Portal
+```javascript
+{
+  type: 'gtag-event',
+  platform: 'Gtag',
+  event: 'library_load',
+  tagId: 'G-XXXXX',
+  tagType: 'GA4',  // Determined from ID prefix
+  serverSide: {
+    isFirstParty: true,
+    endpoint: 'gt.example.com',
+    isServerSideGTM: true
+  }
+}
+```
+
+### Tag Type Detection
+The `tagId` prefix tells us what type of tag:
+
+| Prefix | Tag Type |
+|--------|----------|
+| `G-` | GA4 |
+| `AW-` | Google Ads |
+| `DC-` | Floodlight |
+| `GT-` | Google Tag |
+
+---
+
+## 3. GA4 Event Detection (`/g/collect`)
+
+### What is it?
+GA4 events (page views, purchases, etc.) are sent to a collection endpoint.
+
+### Standard Setup
+Events go directly to Google:
+```
+https://www.google-analytics.com/g/collect?v=2&tid=G-XXXXX&en=page_view...
+```
+
+### First-Party (Server-Side) Setup
+Events go to custom domain first:
+```
+https://gt.example.com/g/collect?v=2&tid=G-XXXXX&en=page_view...
+```
+
+### How We Detect It
+```javascript
+// Check for /g/collect pattern
+if (url.includes('/g/collect')) {
+  // If NOT google-analytics.com or analytics.google.com
+  if (!url.includes('google-analytics.com') && !url.includes('analytics.google.com')) {
+    return 'ga4-firstparty';
+  }
+}
+```
+
+### Event Sent to Portal
 ```javascript
 {
   type: 'ga4-event',
   platform: 'GA4',
-  event: 'purchase',
-  // ... other fields ...
-
+  event: 'page_view',
+  measurementId: 'G-XXXXX',
   serverSide: {
     isFirstParty: true,
-    endpoint: 'sgtm.example.com',
-    transportUrl: 'https://sgtm.example.com/g/collect',
+    endpoint: 'gt.example.com',
+    transportUrl: 'https://gt.example.com',  // If present in params
     hasTransportUrl: true,
     isServerSideGTM: true
   }
@@ -34,314 +172,102 @@ All events now include a `serverSide` object:
 
 ---
 
-## Platform-Specific Detection
+## Understanding the Flow
 
-### GA4 Events
-
-```javascript
-serverSide: {
-  isFirstParty: boolean,      // True if endpoint is not google-analytics.com
-  endpoint: string | null,    // Custom endpoint hostname (if first-party)
-  transportUrl: string | null,// Value of transport_url parameter
-  hasTransportUrl: boolean,   // True if transport_url is present
-  isServerSideGTM: boolean    // True if transport_url points to custom domain
-}
+### Standard (Client-Side) Flow
 ```
-
-**Detection Logic:**
-- `isFirstParty`: Request goes to a domain other than `google-analytics.com` or `analytics.google.com`
-- `isServerSideGTM`: The `transport_url` parameter points to a non-Google domain
-
-**Example First-Party GA4:**
+Browser  ──────────────────────►  google-analytics.com
+                                  googletagmanager.com
+                                  facebook.com/tr
 ```
-https://sgtm.example.com/g/collect?v=2&tid=G-XXXXX&...
+- Direct requests to vendor domains
+- Easily blocked by ad blockers
+- Third-party cookies
+
+### Server-Side GTM Flow
 ```
-
-### GTM Container Load
-
-```javascript
-serverSide: {
-  isFirstParty: boolean,      // True if loaded from custom domain
-  endpoint: string | null,    // Custom endpoint hostname
-  isServerSideGTM: boolean    // True if first-party (implies sGTM)
-}
+Browser  ───►  gt.example.com  ───►  Google Analytics
+               (sGTM Server)   ───►  Google Ads
+                               ───►  Meta CAPI
+                               ───►  etc.
 ```
+- Requests go to first-party domain
+- Bypasses most ad blockers
+- First-party cookies
+- Server can enrich/filter data
 
-**Detection Logic:**
-- `isFirstParty`: GTM container loaded from domain other than `googletagmanager.com`
+---
 
-**Example First-Party GTM:**
-```
-https://metrics.example.com/gtm.js?id=GTM-XXXXX
-```
+## What We CAN vs CANNOT Detect
 
-### Meta Pixel
+### ✅ CAN Detect (Browser-Side)
+| Detection | How |
+|-----------|-----|
+| GTM loaded from first-party | `/gtm.js` on custom domain |
+| Gtag loaded from first-party | `/gtag/js` on custom domain |
+| GA4 events to first-party | `/g/collect` on custom domain |
+| `transport_url` configured | Parameter in GA4 request |
 
-```javascript
-serverSide: {
-  isFirstParty: false,        // Meta doesn't support first-party
-  hasEventId: boolean,        // True if event_id/eid present
-  eventId: string | null,     // The event ID value
-  hasExternalId: boolean,     // True if external_id present
-  capiConfigured: boolean     // True if eventId present (deduplication)
-}
-```
-
-**Detection Logic:**
-- `capiConfigured`: The `eid` or `eventID` parameter is present, indicating the browser event has a matching server-side CAPI event for deduplication
-
-**Example with CAPI deduplication:**
-```
-https://www.facebook.com/tr?ev=Purchase&eid=abc123-unique-id&...
-```
-
-### TikTok Pixel
-
-```javascript
-serverSide: {
-  isFirstParty: false,        // TikTok doesn't support first-party
-  hasEventId: boolean,        // True if event_id present
-  eventId: string | null,     // The event ID value
-  eventsApiConfigured: boolean// True if eventId present
-}
-```
+### ❌ CANNOT Detect (Server-Side)
+| Not Detectable | Why |
+|----------------|-----|
+| sGTM → Google Analytics | Server-to-server, invisible |
+| sGTM → Meta CAPI | Server-to-server, invisible |
+| Server-side enrichment | Happens after browser request |
+| Events without browser component | Never touches browser |
 
 ---
 
 ## Portal Implementation
 
-### Displaying Server-Side Status
+### Display Server-Side Badge
+When `serverSide.isFirstParty === true`, show a badge:
 
 ```jsx
-function EventCard({ event }) {
-  const { serverSide } = event;
-
-  return (
-    <div className="event-card">
-      <div className="event-header">
-        <span className="platform">{event.platform}</span>
-        <span className="event-name">{event.event}</span>
-
-        {/* Server-side badges */}
-        {serverSide?.isFirstParty && (
-          <span className="badge first-party">1st Party</span>
-        )}
-        {serverSide?.isServerSideGTM && (
-          <span className="badge sgtm">sGTM</span>
-        )}
-        {serverSide?.capiConfigured && (
-          <span className="badge capi">CAPI</span>
-        )}
-      </div>
-
-      {serverSide?.endpoint && (
-        <div className="endpoint">
-          Endpoint: {serverSide.endpoint}
-        </div>
-      )}
-    </div>
-  );
-}
+{event.serverSide?.isFirstParty && (
+  <span className="badge sgtm">Server-Side</span>
+)}
 ```
 
-### CSS for Badges
-
-```css
-.badge {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: bold;
-  margin-left: 4px;
-}
-
-.badge.first-party {
-  background: #8b5cf6;
-  color: white;
-}
-
-.badge.sgtm {
-  background: #06b6d4;
-  color: white;
-}
-
-.badge.capi {
-  background: #f59e0b;
-  color: white;
-}
-```
-
-### Tracking Configuration Summary
-
-Aggregate server-side detection across events to show a summary:
-
-```javascript
-function analyzeTrackingConfig(events) {
-  const config = {
-    ga4: {
-      detected: false,
-      isFirstParty: false,
-      endpoint: null,
-      isServerSideGTM: false
-    },
-    gtm: {
-      detected: false,
-      isFirstParty: false,
-      endpoint: null
-    },
-    meta: {
-      detected: false,
-      capiConfigured: false
-    },
-    tiktok: {
-      detected: false,
-      eventsApiConfigured: false
-    }
-  };
-
-  for (const event of events) {
-    if (event.platform === 'GA4') {
-      config.ga4.detected = true;
-      if (event.serverSide?.isFirstParty) {
-        config.ga4.isFirstParty = true;
-        config.ga4.endpoint = event.serverSide.endpoint;
-      }
-      if (event.serverSide?.isServerSideGTM) {
-        config.ga4.isServerSideGTM = true;
-      }
-    }
-
-    if (event.platform === 'GTM') {
-      config.gtm.detected = true;
-      if (event.serverSide?.isFirstParty) {
-        config.gtm.isFirstParty = true;
-        config.gtm.endpoint = event.serverSide.endpoint;
-      }
-    }
-
-    if (event.platform === 'Meta Pixel') {
-      config.meta.detected = true;
-      if (event.serverSide?.capiConfigured) {
-        config.meta.capiConfigured = true;
-      }
-    }
-
-    if (event.platform === 'TikTok Pixel') {
-      config.tiktok.detected = true;
-      if (event.serverSide?.eventsApiConfigured) {
-        config.tiktok.eventsApiConfigured = true;
-      }
-    }
-  }
-
-  return config;
-}
-```
-
-### Configuration Panel UI
+### Tracking Configuration Panel
+Aggregate detections to show setup summary:
 
 ```jsx
-function TrackingConfigPanel({ config }) {
-  return (
-    <div className="config-panel">
-      <h3>Tracking Configuration</h3>
+<div className="config-panel">
+  <h3>Tracking Setup Detected</h3>
 
-      {config.ga4.detected && (
-        <div className="config-item">
-          <span className="platform-icon ga4">GA4</span>
-          <div className="config-details">
-            {config.ga4.isFirstParty ? (
-              <>
-                <span className="badge first-party">First-Party</span>
-                <span className="endpoint">{config.ga4.endpoint}</span>
-              </>
-            ) : (
-              <span className="badge standard">Standard</span>
-            )}
-            {config.ga4.isServerSideGTM && (
-              <span className="badge sgtm">Server-Side GTM</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {config.gtm.detected && (
-        <div className="config-item">
-          <span className="platform-icon gtm">GTM</span>
-          <div className="config-details">
-            {config.gtm.isFirstParty ? (
-              <>
-                <span className="badge first-party">First-Party</span>
-                <span className="endpoint">{config.gtm.endpoint}</span>
-              </>
-            ) : (
-              <span className="badge standard">Standard</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {config.meta.detected && (
-        <div className="config-item">
-          <span className="platform-icon meta">Meta</span>
-          <div className="config-details">
-            {config.meta.capiConfigured ? (
-              <span className="badge capi">CAPI Configured</span>
-            ) : (
-              <span className="badge standard">Browser Only</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {config.tiktok.detected && (
-        <div className="config-item">
-          <span className="platform-icon tiktok">TikTok</span>
-          <div className="config-details">
-            {config.tiktok.eventsApiConfigured ? (
-              <span className="badge capi">Events API Configured</span>
-            ) : (
-              <span className="badge standard">Browser Only</span>
-            )}
-          </div>
-        </div>
-      )}
+  {gtmFirstParty && (
+    <div className="config-item">
+      <span className="badge">GTM (Server-Side)</span>
+      <span>Loaded from: {gtmEndpoint}</span>
     </div>
-  );
-}
+  )}
+
+  {gtagFirstParty && (
+    <div className="config-item">
+      <span className="badge">Gtag (Server-Side)</span>
+      <span>Endpoint: {gtagEndpoint}</span>
+    </div>
+  )}
+
+  {ga4FirstParty && (
+    <div className="config-item">
+      <span className="badge">GA4 (First-Party)</span>
+      <span>Events to: {ga4Endpoint}</span>
+    </div>
+  )}
+</div>
 ```
-
----
-
-## What Can vs Cannot Be Detected
-
-### ✅ CAN Detect (Browser-Side)
-
-| Setup | How It's Detected |
-|-------|-------------------|
-| First-party GTM | `gtm.js` loaded from custom domain |
-| First-party GA4 endpoint | `/g/collect` requests to custom domain |
-| Server-side GTM endpoint | `transport_url` parameter pointing to custom domain |
-| Meta CAPI deduplication | `eventID`/`eid` parameter present |
-| TikTok Events API dedup | `event_id` in request body |
-
-### ❌ CANNOT Detect (Server-to-Server)
-
-| Setup | Why Not Detectable |
-|-------|-------------------|
-| Actual CAPI server calls | Server-to-server, no browser visibility |
-| Server-side enrichment | Happens on server after browser event |
-| Data forwarding from sGTM | Server-side routing decisions |
-| Enhanced conversions data | Server-side matching |
 
 ---
 
 ## Summary
 
-The `serverSide` object provides visibility into tracking configurations that can be detected from the browser. While it cannot see actual server-to-server communication, it can identify:
+The extension detects **first-party setups** by checking if tracking requests go to custom domains instead of standard Google/vendor domains.
 
-1. **First-party setups** - Custom domain proxying
-2. **Server-side GTM** - Custom transport URLs
-3. **CAPI/Events API** - Deduplication IDs indicate server-side is configured
+When `serverSide.isFirstParty: true`:
+- The site is using **server-side GTM** or a similar proxy setup
+- Tracking is routed through their own domain
+- Server forwards data to final destinations (invisible to us)
 
-This allows the portal to show users a "Tracking Health" or "Configuration" panel indicating what advanced tracking setups are in place.
+This detection helps identify advanced tracking implementations that bypass ad blockers and use first-party cookies.
