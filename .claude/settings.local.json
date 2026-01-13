@@ -9,7 +9,8 @@
       "Bash(taskkill:*)",
       "Bash(npm install)",
       "Bash(tree:*)",
-      "Bash(gh auth status:*)"
+      "Bash(gh auth status:*)",
+      "Bash(npm run release:*)"
     ]
   }
 }

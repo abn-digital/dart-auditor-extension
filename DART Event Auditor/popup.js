@@ -1,6 +1,5 @@
 // DART Event Auditor - Popup Script
 
-const GITHUB_REPO = 'abn-digital/dart-auditor-extension';
 const CURRENT_VERSION = chrome.runtime.getManifest().version;
 
 const statusEl = document.getElementById('status');
@@ -8,67 +7,8 @@ const targetEl = document.getElementById('target');
 const eventsEl = document.getElementById('events');
 const reconnectBtn = document.getElementById('reconnect');
 const multiAlertEl = document.getElementById('multi-alert');
-const updateAlertEl = document.getElementById('update-alert');
-const updateVersionEl = document.getElementById('update-version');
-const dismissUpdateBtn = document.getElementById('dismiss-update');
 
 let recentEvents = [];
-
-// Version comparison (returns true if remote > current)
-function isNewerVersion(remote, current) {
-    const remoteParts = remote.replace(/^v/, '').split('.').map(Number);
-    const currentParts = current.split('.').map(Number);
-
-    for (let i = 0; i < 3; i++) {
-        if ((remoteParts[i] || 0) > (currentParts[i] || 0)) return true;
-        if ((remoteParts[i] || 0) < (currentParts[i] || 0)) return false;
-    }
-    return false;
-}
-
-// Check for updates from GitHub releases
-async function checkForUpdates() {
-    try {
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-        if (!response.ok) return;
-
-        const release = await response.json();
-        const latestVersion = release.tag_name;
-
-        // Check if we've dismissed this version
-        const { dismissedVersion } = await chrome.storage.local.get('dismissedVersion');
-        if (dismissedVersion === latestVersion) return;
-
-        if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
-            updateVersionEl.textContent = latestVersion;
-            updateAlertEl.classList.add('show');
-        }
-    } catch (e) {
-        console.log('Update check failed:', e);
-    }
-}
-
-// Dismiss update notification
-if (dismissUpdateBtn) {
-    dismissUpdateBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const version = updateVersionEl.textContent;
-        await chrome.storage.local.set({ dismissedVersion: version });
-        updateAlertEl.classList.remove('show');
-    });
-}
-
-// Reload extension button
-const reloadBtn = document.getElementById('reload-extension');
-if (reloadBtn) {
-    reloadBtn.addEventListener('click', () => {
-        chrome.runtime.reload();
-    });
-}
-
-// Check for updates on popup open
-checkForUpdates();
 
 // Display current version
 document.getElementById('version-footer').textContent = `v${CURRENT_VERSION}`;

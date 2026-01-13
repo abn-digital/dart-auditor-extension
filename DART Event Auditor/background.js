@@ -24,49 +24,95 @@ function matchesDomain(eventUrl, targetDomain) {
 }
 
 // ============================================
-// Platform Detection
+// First-Party / Server-Side Detection Helpers
+// ============================================
+const GOOGLE_DOMAINS = [
+  'google-analytics.com',
+  'analytics.google.com',
+  'googletagmanager.com',
+  'googleadservices.com',
+  'googlesyndication.com',
+  'doubleclick.net',
+  'google.com'
+];
+
+const META_DOMAINS = [
+  'facebook.com',
+  'facebook.net',
+  'fb.com'
+];
+
+const TIKTOK_DOMAINS = [
+  'tiktok.com',
+  'analytics.tiktok.com'
+];
+
+function isFirstPartyDomain(url, standardDomains) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return !standardDomains.some(domain =>
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getEndpointHost(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================
+// Platform Detection (includes first-party)
 // ============================================
 function detectPlatform(url) {
   const urlLower = url.toLowerCase();
 
-  // GA4
+  // GA4 - Standard endpoints
   if (urlLower.includes('google-analytics.com/g/collect') ||
       urlLower.includes('analytics.google.com/g/collect')) {
     return 'ga4';
   }
 
-  // Meta Pixel - matches /tr? or /tr/ patterns
+  // GA4 - First-party endpoint (any domain with /g/collect pattern)
+  if (urlLower.includes('/g/collect')) {
+    return 'ga4-firstparty';
+  }
+
+  // Meta Pixel - Standard endpoints
   if (urlLower.includes('facebook.com/tr') || urlLower.includes('facebook.net/tr')) {
     return 'meta';
   }
 
   // Google Ads - conversion endpoints only
   if (
-      // Standard conversion endpoints (googleadservices.com)
       urlLower.includes('googleadservices.com/pagead/conversion') ||
-
-      // DoubleClick conversion endpoints
       urlLower.includes('googleads.g.doubleclick.net/pagead/conversion') ||
       urlLower.includes('doubleclick.net/pagead/conversion') ||
-
-      // Alternative Google conversion paths
       urlLower.includes('google.com/pagead/conversion') ||
       urlLower.includes('google.com/pagead/1p-conversion') ||
-
-      // Syndication conversions
       urlLower.includes('googlesyndication.com/pagead/conversion')
   ) {
     return 'gads';
   }
 
-  // TikTok Pixel
+  // TikTok Pixel - Standard
   if (urlLower.includes('analytics.tiktok.com/api/v2/pixel')) {
     return 'tiktok';
   }
 
-  // GTM Container
+  // GTM Container - Standard
   if (urlLower.includes('googletagmanager.com/gtm.js')) {
     return 'gtm';
+  }
+
+  // GTM Container - First-party (any domain with /gtm.js pattern)
+  if (urlLower.includes('/gtm.js') && urlLower.includes('id=gtm-')) {
+    return 'gtm-firstparty';
   }
 
   return null;
@@ -75,7 +121,7 @@ function detectPlatform(url) {
 // ============================================
 // GA4 Parser
 // ============================================
-function parseGA4Event(url, requestBody) {
+function parseGA4Event(url, requestBody, isFirstParty = false) {
   const params = {};
 
   try {
@@ -99,6 +145,21 @@ function parseGA4Event(url, requestBody) {
     } catch (e) {}
   }
 
+  // Detect server-side indicators
+  const endpoint = getEndpointHost(url);
+  const hasTransportUrl = !!params.transport_url;
+  const transportUrl = params.transport_url || null;
+
+  // Build serverSide detection object
+  const serverSide = {
+    isFirstParty: isFirstParty,
+    endpoint: isFirstParty ? endpoint : null,
+    transportUrl: transportUrl,
+    hasTransportUrl: hasTransportUrl,
+    // If transport_url points to a custom domain, it's server-side GTM
+    isServerSideGTM: hasTransportUrl && isFirstPartyDomain(transportUrl, GOOGLE_DOMAINS)
+  };
+
   return {
     type: 'ga4-event',
     platform: 'GA4',
@@ -107,6 +168,7 @@ function parseGA4Event(url, requestBody) {
     pageLocation: params.dl || null,
     value: params['epn.value'] || params.value || null,
     currency: params.cu || null,
+    serverSide: serverSide,
     raw: params
   };
 }
@@ -144,6 +206,25 @@ function parseMetaEvent(url, requestBody) {
     return null;
   }
 
+  // Detect CAPI indicators
+  // eventID/eid is used for deduplication between browser and server events
+  const eventId = params.eid || params.eventID || params.event_id || null;
+  const hasEventId = !!eventId;
+
+  // External ID indicates user matching for CAPI
+  const externalId = params.external_id || params.extern_id || null;
+  const hasExternalId = !!externalId;
+
+  // Build serverSide detection object
+  const serverSide = {
+    isFirstParty: false, // Meta doesn't support first-party endpoints
+    hasEventId: hasEventId,
+    eventId: eventId,
+    hasExternalId: hasExternalId,
+    // If eventID is present, CAPI is likely configured for deduplication
+    capiConfigured: hasEventId
+  };
+
   return {
     type: 'meta-event',
     platform: 'Meta Pixel',
@@ -152,6 +233,7 @@ function parseMetaEvent(url, requestBody) {
     pageLocation: params.dl || null,
     value: params.value || null,
     currency: params.currency || params.cd_currency || null,
+    serverSide: serverSide,
     raw: params
   };
 }
@@ -225,6 +307,13 @@ function parseGoogleAdsEvent(url) {
 
   console.log('[DART Auditor] GAds parsed - type:', eventName, 'conversionId:', conversionId, 'label:', label, 'value:', value, 'currency:', currency);
 
+  // Build serverSide detection object
+  const serverSide = {
+    isFirstParty: false,
+    // Google Ads conversions are typically not first-party proxied
+    endpoint: null
+  };
+
   return {
     type: 'gads-event',
     platform: 'Google Ads',
@@ -238,6 +327,7 @@ function parseGoogleAdsEvent(url) {
     value: value ? parseFloat(value) : null,
     currency: currency,
     transactionId: transactionId,
+    serverSide: serverSide,
     rawUrl: url,
     raw: params
   };
@@ -270,6 +360,20 @@ function parseTikTokEvent(url, requestBody) {
     pixelId = bodyData.context.pixel.code;
   }
 
+  // TikTok Events API detection (similar to Meta CAPI)
+  // event_id is used for deduplication with server-side events
+  const eventId = bodyData.event_id || bodyData.properties?.event_id || null;
+  const hasEventId = !!eventId;
+
+  // Build serverSide detection object
+  const serverSide = {
+    isFirstParty: false,
+    hasEventId: hasEventId,
+    eventId: eventId,
+    // If event_id is present, TikTok Events API is likely configured
+    eventsApiConfigured: hasEventId
+  };
+
   return {
     type: 'tiktok-event',
     platform: 'TikTok Pixel',
@@ -278,6 +382,7 @@ function parseTikTokEvent(url, requestBody) {
     pageLocation: bodyData.context?.page?.url || null,
     value: bodyData.properties?.value || null,
     currency: bodyData.properties?.currency || null,
+    serverSide: serverSide,
     raw: { ...urlParams, body: bodyData }
   };
 }
@@ -285,10 +390,19 @@ function parseTikTokEvent(url, requestBody) {
 // ============================================
 // GTM Parser
 // ============================================
-function parseGTMEvent(url) {
+function parseGTMEvent(url, isFirstParty = false) {
   try {
     const urlObj = new URL(url);
     const containerId = urlObj.searchParams.get('id') || null;
+    const endpoint = getEndpointHost(url);
+
+    // Build serverSide detection object
+    const serverSide = {
+      isFirstParty: isFirstParty,
+      endpoint: isFirstParty ? endpoint : null,
+      // First-party GTM typically indicates server-side GTM setup
+      isServerSideGTM: isFirstParty
+    };
 
     return {
       type: 'gtm-event',
@@ -296,7 +410,8 @@ function parseGTMEvent(url) {
       event: 'container_load',
       containerId: containerId,
       pageLocation: null,
-      raw: { id: containerId }
+      serverSide: serverSide,
+      raw: { id: containerId, endpoint: endpoint }
     };
   } catch (e) {
     return null;
@@ -317,6 +432,13 @@ function connectToPortal() {
       console.log('[DART Auditor] Connected to portal');
       chrome.storage.local.set({ connected: true });
       broadcastStatus();
+
+      // Send extension version to portal
+      const manifest = chrome.runtime.getManifest();
+      ws.send(JSON.stringify({
+        type: 'extension-version',
+        version: manifest.version
+      }));
     };
 
     ws.onmessage = (event) => {
@@ -485,7 +607,11 @@ chrome.webRequest.onBeforeRequest.addListener(
 
     switch (platform) {
       case 'ga4':
-        eventData = parseGA4Event(details.url, requestBody);
+        eventData = parseGA4Event(details.url, requestBody, false);
+        break;
+      case 'ga4-firstparty':
+        eventData = parseGA4Event(details.url, requestBody, true);
+        console.log('[DART Auditor] First-party GA4 detected:', getEndpointHost(details.url));
         break;
       case 'meta':
         eventData = parseMetaEvent(details.url, requestBody);
@@ -497,7 +623,11 @@ chrome.webRequest.onBeforeRequest.addListener(
         eventData = parseTikTokEvent(details.url, requestBody);
         break;
       case 'gtm':
-        eventData = parseGTMEvent(details.url);
+        eventData = parseGTMEvent(details.url, false);
+        break;
+      case 'gtm-firstparty':
+        eventData = parseGTMEvent(details.url, true);
+        console.log('[DART Auditor] First-party GTM detected:', getEndpointHost(details.url));
         break;
     }
 
