@@ -6,7 +6,25 @@ This document explains how the DART extension detects hardcoded tracking tags in
 
 ## Overview
 
-The extension scans each page's HTML to detect tracking tags that are hardcoded directly into the page source. This provides visibility into the site's tracking implementation without relying on network requests.
+The extension scans each page's HTML to detect tracking tags that are **hardcoded** - meaning they are NOT deployed via Google Tag Manager.
+
+**Definition of "Hardcoded":**
+- Any tracking tag that is NOT coming from GTM
+- If GTM exists on the page, other tags (gtag, Meta, TikTok, etc.) could have been injected by GTM, so we don't flag them as hardcoded
+
+---
+
+## Detection Logic
+
+```
+IF GTM container exists on page:
+    → Only report GTM containers (gtag, meta, tiktok, gads are skipped)
+    → Those tags could be GTM-deployed, not hardcoded
+
+IF NO GTM container exists:
+    → Report all detected tags as hardcoded
+    → gtag, meta, tiktok, gads are definitely hardcoded
+```
 
 ---
 
@@ -38,12 +56,17 @@ When hardcoded tags are detected, the extension sends this message to the portal
     "tiktok": [...],
     "gads": [...]
   },
+  "hasGTM": false,
   "pageLocation": "https://example.com/page",
   "pageTitle": "Page Title",
   "timestamp": "2025-01-14T10:30:00.000Z",
   "source": "content-script"
 }
 ```
+
+**Key field: `hasGTM`**
+- `true` = GTM exists on page, only GTM containers are reported (other tags could be GTM-deployed)
+- `false` = No GTM, all detected tags are definitely hardcoded
 
 ---
 
