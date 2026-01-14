@@ -1,6 +1,6 @@
 {
   "name": "dart-auditor-extension",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "DART Event Auditor - Chrome extension for capturing analytics events",
   "scripts": {
     "release": "node scripts/release.js"

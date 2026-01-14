@@ -536,6 +536,51 @@ function broadcastStatus() {
 }
 
 // ============================================
+// DataLayer Deduplication (content script + polling can detect same push)
+// ============================================
+const dataLayerDedupeCache = new Map(); // eventSignature -> timestamp
+const DATALAYER_DEDUPE_MS = 200; // Very short window - only catches same push processed twice
+
+// Generate signature for dataLayer event (includes raw data hash for precision)
+function getDataLayerSignature(eventData) {
+  const parts = [
+    eventData.event || '',
+    eventData.pageLocation || '',
+    // Include a hash of the raw data to distinguish truly different events
+    JSON.stringify(eventData.raw || {}).substring(0, 200)
+  ];
+  return parts.join('|');
+}
+
+// Check if this dataLayer event was just processed (within 200ms)
+// This catches: content script + polling detecting the same push
+// Does NOT catch: legitimate duplicate events from the website (which fire >200ms apart or have different data)
+function isDataLayerDuplicate(eventData) {
+  const signature = getDataLayerSignature(eventData);
+  const now = Date.now();
+  const lastSent = dataLayerDedupeCache.get(signature);
+
+  if (lastSent && (now - lastSent) < DATALAYER_DEDUPE_MS) {
+    console.log('[DART Auditor] DataLayer duplicate blocked (same push, different detector):', eventData.event);
+    return true;
+  }
+
+  // Record this event
+  dataLayerDedupeCache.set(signature, now);
+
+  // Clean up old entries
+  if (dataLayerDedupeCache.size > 50) {
+    for (const [key, timestamp] of dataLayerDedupeCache) {
+      if (now - timestamp > 1000) {
+        dataLayerDedupeCache.delete(key);
+      }
+    }
+  }
+
+  return false;
+}
+
+// ============================================
 // Send Event to Portal
 // ============================================
 function sendEventToPortal(eventData, initiator) {
@@ -561,6 +606,9 @@ function sendEventToPortal(eventData, initiator) {
     return; // Don't send events if no target domain is set
   }
 
+  // NOTE: No deduplication here - network requests are real events
+  // If a site fires 3 GA4 purchase events, we WANT to capture all 3
+
   // Build the event payload
   const payload = {
     ...eventData,
@@ -581,9 +629,6 @@ function sendEventToPortal(eventData, initiator) {
     type: 'event',
     event: payload
   }).catch(() => {});
-
-  // Poll dataLayer after sending event (catches associated dataLayer pushes)
-  pollDataLayerAllTabs();
 }
 
 // ============================================
@@ -797,9 +842,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(eventData));
     }
-
-    // Also poll dataLayer after user actions
-    pollDataLayerAllTabs();
   }
 
   // Handle hardcoded tags detected by content script
@@ -866,6 +908,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       timestamp: message.timestamp ? new Date(message.timestamp).toISOString() : new Date().toISOString(),
       source: 'datalayer'
     };
+
+    // Check for duplicate (same push detected by content script + polling)
+    if (isDataLayerDuplicate(eventData)) {
+      return;
+    }
 
     // Send directly to WebSocket (bypass domain filter for dataLayer)
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -937,6 +984,11 @@ async function pollDataLayerForTab(tabId, tabUrl) {
             timestamp: new Date().toISOString(),
             source: 'datalayer'
           };
+
+          // Check for duplicate (same push detected by content script + polling)
+          if (isDataLayerDuplicate(eventData)) {
+            continue;
+          }
 
           // Send to WebSocket
           if (ws && ws.readyState === WebSocket.OPEN) {
