@@ -802,6 +802,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     pollDataLayerAllTabs();
   }
 
+  // Handle hardcoded tags detected by content script
+  if (message.type === 'hardcoded-tags') {
+    const { detections, pageUrl, pageTitle, timestamp } = message;
+
+    console.log('[DART Auditor] Hardcoded tags detected:', detections);
+
+    // Check domain filter
+    if (targetDomain && !matchesDomain(pageUrl, targetDomain)) {
+      console.log('[DART Auditor] Hardcoded tags filtered - domain mismatch');
+      return;
+    }
+
+    if (!targetDomain) {
+      console.log('[DART Auditor] Hardcoded tags filtered - no target domain');
+      return;
+    }
+
+    // Build the event payload
+    const eventData = {
+      type: 'hardcoded-tags',
+      platform: 'Hardcoded Tags',
+      event: 'page_scan',
+      detections: detections,
+      pageLocation: pageUrl,
+      pageTitle: pageTitle,
+      timestamp: new Date(timestamp).toISOString(),
+      source: 'content-script'
+    };
+
+    // Send via WebSocket
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(eventData));
+      console.log('[DART Auditor] Hardcoded tags sent to portal');
+    }
+
+    // Notify popup
+    chrome.runtime.sendMessage({
+      type: 'event',
+      event: eventData
+    }).catch(() => {});
+  }
+
   // Handle dataLayer events from content script
   if (message.type === 'datalayer-event') {
     const data = message.event;
