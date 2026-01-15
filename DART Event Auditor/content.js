@@ -5,6 +5,24 @@
 (function() {
     'use strict';
 
+    // Google domains for first-party detection
+    const GOOGLE_DOMAINS = [
+        'google-analytics.com',
+        'analytics.google.com',
+        'googletagmanager.com',
+        'googleadservices.com',
+        'googlesyndication.com',
+        'doubleclick.net',
+        'google.com'
+    ];
+
+    function isGoogleDomain(hostname) {
+        const host = hostname.toLowerCase();
+        return GOOGLE_DOMAINS.some(domain =>
+            host === domain || host.endsWith('.' + domain)
+        );
+    }
+
     console.log('[DART Extension] Content script loaded');
 
     // Wait for DOM to be ready
@@ -114,8 +132,8 @@
             const gtagScriptRegex = /(?:googletagmanager\.com|[a-z0-9.-]+)\/gtag\/js\?id=([A-Z0-9-]+)/gi;
             while ((match = gtagScriptRegex.exec(fullHTML)) !== null) {
                 const tagId = match[1];
-                const isFirstParty = !match[0].includes('googletagmanager.com');
                 const endpoint = match[0].split('/gtag/js')[0].replace(/.*\/\//, '');
+                const isFirstParty = !isGoogleDomain(endpoint);
 
                 // Check if we already have this from config detection
                 const existing = detections.gtag.find(g => g.tagId === tagId);

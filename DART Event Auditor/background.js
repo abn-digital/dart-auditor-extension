@@ -72,15 +72,9 @@ function getEndpointHost(url) {
 function detectPlatform(url) {
   const urlLower = url.toLowerCase();
 
-  // GA4 - Standard endpoints
-  if (urlLower.includes('google-analytics.com/g/collect') ||
-      urlLower.includes('analytics.google.com/g/collect')) {
-    return 'ga4';
-  }
-
-  // GA4 - First-party endpoint (any domain with /g/collect pattern)
+  // GA4 - /g/collect pattern (standard or first-party based on domain)
   if (urlLower.includes('/g/collect')) {
-    return 'ga4-firstparty';
+    return isFirstPartyDomain(url, GOOGLE_DOMAINS) ? 'ga4-firstparty' : 'ga4';
   }
 
   // Meta Pixel - Standard endpoints
@@ -105,24 +99,14 @@ function detectPlatform(url) {
     return 'tiktok';
   }
 
-  // GTM Container - Standard
-  if (urlLower.includes('googletagmanager.com/gtm.js')) {
-    return 'gtm';
-  }
-
-  // GTM Container - First-party (any domain with /gtm.js pattern)
+  // GTM Container - /gtm.js pattern (standard or first-party based on domain)
   if (urlLower.includes('/gtm.js') && urlLower.includes('id=gtm-')) {
-    return 'gtm-firstparty';
+    return isFirstPartyDomain(url, GOOGLE_DOMAINS) ? 'gtm-firstparty' : 'gtm';
   }
 
-  // Gtag.js - Standard (from googletagmanager.com)
-  if (urlLower.includes('googletagmanager.com/gtag/js')) {
-    return 'gtag';
-  }
-
-  // Gtag.js - First-party (any other domain with /gtag/js pattern)
+  // Gtag.js - /gtag/js pattern (standard or first-party based on domain)
   if (urlLower.includes('/gtag/js') && urlLower.includes('id=')) {
-    return 'gtag-firstparty';
+    return isFirstPartyDomain(url, GOOGLE_DOMAINS) ? 'gtag-firstparty' : 'gtag';
   }
 
   return null;
