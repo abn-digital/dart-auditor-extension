@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "DART Event Auditor",
   "version": "2.4.3",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAta7XTPngYtJcbhT5DgwF2XAyVzrw+K1dja+FEjYtV5KN3/9mcg3+V6WSaJLTefu+gbqJHV5qPLkjZufmO4qlA69pm1o4cfNrOdxBlLTc9BFcdANkdGg+1pBrsOFS505+pXfm0z6f+4kctzQzupebdtaGcKg/CnOM4N2GnxKk/pGLaiGZ5Ooq6trLs4Viu00Xda7vLhOqHAIn10zPpdL8i8ehzaIgY+HKnzJj6HDy9sTwjJI2ubaksD43jLGQYdczesV0xz9BlYnV2bddICkNQI4ybn9RRgEnQrQMk38nuFHhIoLI+YIRitHnuycsKuBgHq2CctLk0bgkGEwRlVtpEQIDAQAB",
   "description": "Captures GA4, Meta Pixel, Google Ads, and TikTok Pixel events for DART Tracking Portal",
   "permissions": [
     "webRequest",
